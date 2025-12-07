@@ -1,23 +1,20 @@
 # CalSync
 
-Bidirektionaler Kalender-Sync für macOS. Erstellt automatisch Platzhaltertermine ("Nicht verfügbar") zwischen zwei Kalendern in der Apple Kalender-App.
+Multi-Kalender-Sync für macOS. Erstellt automatisch Platzhaltertermine ("Nicht verfügbar") zwischen beliebig vielen Kalendern in der Apple Kalender-App.
 
 ## Anwendungsfall
 
-Du hast zwei Kalender (z.B. Arbeitgeber und Kunde) und möchtest, dass beide Seiten deine Verfügbarkeit sehen können, ohne die Details der Termine preiszugeben. CalSync erstellt für jeden Termin im einen Kalender einen "Nicht verfügbar"-Platzhalter im anderen Kalender.
+Du hast mehrere Kalender (z.B. Arbeitgeber, Kunde, Privat) und möchtest, dass alle Seiten deine Verfügbarkeit sehen können, ohne die Details der Termine preiszugeben. CalSync erstellt für jeden Termin in einem Kalender einen "Nicht verfügbar"-Platzhalter in allen anderen konfigurierten Kalendern.
 
 ## Installation
 
 ```bash
 # Repository klonen
-git clone <repo-url>
+git clone https://github.com/skempken/CalSync.git
 cd CalSync
 
 # Dependencies installieren
 uv sync
-
-# Oder mit pip
-pip install -e .
 ```
 
 ## Verwendung
@@ -36,7 +33,7 @@ Zeigt alle verfügbaren Kalender mit ID und Schreibrechten an.
 uv run calsync configure
 ```
 
-Wählt die beiden zu synchronisierenden Kalender aus. Die Konfiguration wird in `.calsync.json` im aktuellen Verzeichnis gespeichert.
+Wählt die zu synchronisierenden Kalender aus (mind. 2, beliebig viele möglich). Die Konfiguration wird in `.calsync.json` im aktuellen Verzeichnis gespeichert.
 
 ### Konfiguration anzeigen
 
@@ -62,10 +59,11 @@ uv run calsync -v sync
 
 ## Funktionsweise
 
-- Für jeden "echten" Termin in Kalender A wird ein Platzhalter in Kalender B erstellt (und umgekehrt)
+- Für jeden "echten" Termin in einem Kalender wird ein Platzhalter in allen anderen konfigurierten Kalendern erstellt
+- Bei n Kalendern werden n-1 Platzhalter pro Termin erstellt
 - Platzhalter haben den Titel "Nicht verfügbar" und blockieren nur die Zeit
 - Änderungen an Terminen (Zeit, Dauer) werden bei erneutem Sync übernommen
-- Gelöschte Termine führen zur Löschung des zugehörigen Platzhalters
+- Gelöschte Termine führen zur Löschung der zugehörigen Platzhalter
 - Platzhalter werden über eine versteckte ID im Notizen-Feld getrackt
 
 ## Voraussetzungen

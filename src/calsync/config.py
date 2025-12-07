@@ -1,21 +1,25 @@
 """Configuration management for CalSync."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 CONFIG_FILE = Path.cwd() / ".calsync.json"
+
+
+@dataclass
+class CalendarConfig:
+    """Configuration for a single calendar."""
+
+    id: str
+    name: str
 
 
 @dataclass
 class Config:
     """Application configuration."""
 
-    calendar_a_id: Optional[str] = None
-    calendar_a_name: Optional[str] = None
-    calendar_b_id: Optional[str] = None
-    calendar_b_name: Optional[str] = None
+    calendars: list[CalendarConfig] = field(default_factory=list)
 
     @classmethod
     def load(cls) -> "Config":
@@ -25,22 +29,50 @@ class Config:
 
         with open(CONFIG_FILE) as f:
             data = json.load(f)
-        return cls(**data)
+
+        # Handle legacy format (calendar_a_id, calendar_b_id)
+        if "calendar_a_id" in data:
+            calendars = []
+            if data.get("calendar_a_id"):
+                calendars.append(
+                    CalendarConfig(
+                        id=data["calendar_a_id"],
+                        name=data.get("calendar_a_name", "Calendar A"),
+                    )
+                )
+            if data.get("calendar_b_id"):
+                calendars.append(
+                    CalendarConfig(
+                        id=data["calendar_b_id"],
+                        name=data.get("calendar_b_name", "Calendar B"),
+                    )
+                )
+            return cls(calendars=calendars)
+
+        # New format
+        calendars = [CalendarConfig(**c) for c in data.get("calendars", [])]
+        return cls(calendars=calendars)
 
     def save(self) -> None:
         """Save configuration to file."""
         with open(CONFIG_FILE, "w") as f:
             json.dump(
-                {
-                    "calendar_a_id": self.calendar_a_id,
-                    "calendar_a_name": self.calendar_a_name,
-                    "calendar_b_id": self.calendar_b_id,
-                    "calendar_b_name": self.calendar_b_name,
-                },
+                {"calendars": [{"id": c.id, "name": c.name} for c in self.calendars]},
                 f,
                 indent=2,
             )
 
     def is_configured(self) -> bool:
-        """Check if both calendars are configured."""
-        return bool(self.calendar_a_id and self.calendar_b_id)
+        """Check if at least two calendars are configured."""
+        return len(self.calendars) >= 2
+
+    def get_calendar_ids(self) -> list[str]:
+        """Get list of calendar IDs."""
+        return [c.id for c in self.calendars]
+
+    def get_calendar_name(self, calendar_id: str) -> str:
+        """Get calendar name by ID."""
+        for c in self.calendars:
+            if c.id == calendar_id:
+                return c.name
+        return calendar_id[:8]

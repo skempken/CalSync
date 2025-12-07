@@ -3,11 +3,12 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from itertools import permutations
 
 from calsync.adapters.base import CalendarAdapter
 from calsync.models.event import CalendarEvent
 from calsync.models.placeholder import PlaceholderInfo
-from calsync.sync.differ import ChangeDiffer, ChangeType, SyncAction
+from calsync.sync.differ import ChangeDiffer, ChangeType
 from calsync.sync.tracker import EventTracker
 
 logger = logging.getLogger(__name__)
@@ -17,26 +18,53 @@ logger = logging.getLogger(__name__)
 class SyncResult:
     """Result of a sync operation."""
 
+    source_id: str = ""
+    target_id: str = ""
     created: int = 0
     updated: int = 0
     deleted: int = 0
     errors: list[str] = field(default_factory=list)
 
+    @property
+    def total_actions(self) -> int:
+        return self.created + self.updated + self.deleted
+
+
+@dataclass
+class SyncSummary:
+    """Summary of all sync operations."""
+
+    results: list[SyncResult] = field(default_factory=list)
+
+    @property
+    def total_created(self) -> int:
+        return sum(r.created for r in self.results)
+
+    @property
+    def total_updated(self) -> int:
+        return sum(r.updated for r in self.results)
+
+    @property
+    def total_deleted(self) -> int:
+        return sum(r.deleted for r in self.results)
+
+    @property
+    def all_errors(self) -> list[str]:
+        return [e for r in self.results for e in r.errors]
+
 
 class SyncEngine:
-    """Main sync logic for bidirectional calendar sync."""
+    """Main sync logic for multi-calendar sync."""
 
     PLACEHOLDER_TITLE = "Nicht verfügbar"
 
     def __init__(
         self,
         adapter: CalendarAdapter,
-        calendar_a_id: str,
-        calendar_b_id: str,
+        calendar_ids: list[str],
     ):
         self.adapter = adapter
-        self.calendar_a_id = calendar_a_id
-        self.calendar_b_id = calendar_b_id
+        self.calendar_ids = calendar_ids
         self.tracker = EventTracker()
         self.differ = ChangeDiffer(self.tracker)
 
@@ -45,9 +73,11 @@ class SyncEngine:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         dry_run: bool = False,
-    ) -> tuple[SyncResult, SyncResult]:
+    ) -> SyncSummary:
         """
-        Perform bidirectional sync.
+        Perform sync between all calendar pairs.
+
+        For n calendars, syncs each calendar to all others.
 
         Args:
             start_date: Start of sync period (default: today)
@@ -55,7 +85,7 @@ class SyncEngine:
             dry_run: If True, only simulate changes
 
         Returns:
-            Tuple of SyncResults (A->B, B->A)
+            SyncSummary with results for each direction
         """
         if start_date is None:
             start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -63,37 +93,37 @@ class SyncEngine:
             end_date = start_date + timedelta(days=30)
 
         logger.info(f"Sync period: {start_date.date()} to {end_date.date()}")
+        logger.info(f"Calendars: {len(self.calendar_ids)}")
 
-        # Get events from both calendars
-        events_a = self.adapter.get_events(self.calendar_a_id, start_date, end_date)
-        events_b = self.adapter.get_events(self.calendar_b_id, start_date, end_date)
+        summary = SyncSummary()
 
-        logger.info(f"Calendar A: {len(events_a)} events")
-        logger.info(f"Calendar B: {len(events_b)} events")
+        # Load events from all calendars
+        events_by_calendar: dict[str, list[CalendarEvent]] = {}
+        for cal_id in self.calendar_ids:
+            events = self.adapter.get_events(cal_id, start_date, end_date)
+            events_by_calendar[cal_id] = events
+            logger.info(f"Calendar {cal_id[:8]}...: {len(events)} events")
 
-        # Sync A -> B
-        result_a_to_b = self._sync_direction(
-            events_a,
-            events_b,
-            self.calendar_a_id,
-            self.calendar_b_id,
-            dry_run,
-        )
+        # Sync each pair (source -> target)
+        for source_id, target_id in permutations(self.calendar_ids, 2):
+            result = self._sync_direction(
+                source_events=events_by_calendar[source_id],
+                target_events=events_by_calendar[target_id],
+                source_cal_id=source_id,
+                target_cal_id=target_id,
+                dry_run=dry_run,
+            )
+            result.source_id = source_id
+            result.target_id = target_id
+            summary.results.append(result)
 
-        # Refresh events_a after A->B sync (new placeholders may have been created)
-        if not dry_run:
-            events_a = self.adapter.get_events(self.calendar_a_id, start_date, end_date)
+            # Refresh target events if changes were made
+            if not dry_run and result.total_actions > 0:
+                events_by_calendar[target_id] = self.adapter.get_events(
+                    target_id, start_date, end_date
+                )
 
-        # Sync B -> A
-        result_b_to_a = self._sync_direction(
-            events_b,
-            events_a,
-            self.calendar_b_id,
-            self.calendar_a_id,
-            dry_run,
-        )
-
-        return result_a_to_b, result_b_to_a
+        return summary
 
     def _sync_direction(
         self,
@@ -110,7 +140,9 @@ class SyncEngine:
             source_events, target_events, source_cal_id
         )
 
-        logger.info(f"Direction {source_cal_id[:8]}... -> {target_cal_id[:8]}...: {len(actions)} actions")
+        logger.debug(
+            f"Direction {source_cal_id[:8]}... -> {target_cal_id[:8]}...: {len(actions)} actions"
+        )
 
         for action in actions:
             try:
@@ -122,7 +154,7 @@ class SyncEngine:
                             target_cal_id,
                         )
                     result.created += 1
-                    logger.info(f"CREATE: {action.reason}")
+                    logger.debug(f"CREATE: {action.reason}")
 
                 elif action.action_type == ChangeType.UPDATE:
                     if not dry_run:
@@ -132,13 +164,13 @@ class SyncEngine:
                             source_cal_id,
                         )
                     result.updated += 1
-                    logger.info(f"UPDATE: {action.reason}")
+                    logger.debug(f"UPDATE: {action.reason}")
 
                 elif action.action_type == ChangeType.DELETE:
                     if not dry_run:
                         self.adapter.delete_event(action.target_event.id)
                     result.deleted += 1
-                    logger.info(f"DELETE: {action.reason}")
+                    logger.debug(f"DELETE: {action.reason}")
 
             except Exception as e:
                 error_msg = f"Error in {action.action_type.value}: {e}"

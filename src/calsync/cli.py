@@ -6,13 +6,13 @@ from datetime import datetime, timedelta
 import click
 
 from calsync.adapters.eventkit import EventKitAdapter
-from calsync.config import Config
+from calsync.config import CalendarConfig, Config
 
 
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 def cli(verbose: bool) -> None:
-    """CalSync - Bidirectional calendar sync for macOS."""
+    """CalSync - Multi-calendar sync for macOS."""
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
@@ -52,29 +52,38 @@ def configure() -> None:
     for i, cal in enumerate(writable, 1):
         click.echo(f"  {i}. {cal['name']} ({cal['source']})")
 
-    click.echo()
-    a_idx = click.prompt("Calendar A (number)", type=int) - 1
-    b_idx = click.prompt("Calendar B (number)", type=int) - 1
+    click.echo("\nEnter calendar numbers to sync (comma-separated, e.g. '1,2,3'):")
+    selection = click.prompt("Calendars", type=str)
 
-    if a_idx == b_idx:
-        click.echo("Error: Please select two different calendars.")
+    try:
+        indices = [int(x.strip()) - 1 for x in selection.split(",")]
+    except ValueError:
+        click.echo("Error: Invalid input. Use comma-separated numbers.")
         return
 
-    if not (0 <= a_idx < len(writable) and 0 <= b_idx < len(writable)):
-        click.echo("Error: Invalid selection.")
+    if len(indices) < 2:
+        click.echo("Error: Select at least 2 calendars.")
         return
 
-    config = Config(
-        calendar_a_id=writable[a_idx]["id"],
-        calendar_a_name=writable[a_idx]["name"],
-        calendar_b_id=writable[b_idx]["id"],
-        calendar_b_name=writable[b_idx]["name"],
-    )
+    if len(indices) != len(set(indices)):
+        click.echo("Error: Duplicate selections not allowed.")
+        return
+
+    if not all(0 <= i < len(writable) for i in indices):
+        click.echo("Error: Invalid calendar number.")
+        return
+
+    selected = [
+        CalendarConfig(id=writable[i]["id"], name=writable[i]["name"])
+        for i in indices
+    ]
+
+    config = Config(calendars=selected)
     config.save()
 
-    click.echo(f"\nConfiguration saved:")
-    click.echo(f"  A: {config.calendar_a_name}")
-    click.echo(f"  B: {config.calendar_b_name}")
+    click.echo(f"\nConfiguration saved ({len(selected)} calendars):")
+    for i, cal in enumerate(selected, 1):
+        click.echo(f"  {i}. {cal.name}")
 
 
 @cli.command()
@@ -88,14 +97,12 @@ def sync(days: int, dry_run: bool) -> None:
         click.echo("Error: Calendars not configured. Run 'calsync configure' first.")
         return
 
-    # Import here to avoid circular imports
     from calsync.sync.engine import SyncEngine
 
     adapter = EventKitAdapter()
     engine = SyncEngine(
         adapter=adapter,
-        calendar_a_id=config.calendar_a_id,
-        calendar_b_id=config.calendar_b_id,
+        calendar_ids=config.get_calendar_ids(),
     )
 
     end_date = datetime.now() + timedelta(days=days)
@@ -103,41 +110,50 @@ def sync(days: int, dry_run: bool) -> None:
     if dry_run:
         click.echo("=== DRY RUN - No changes will be made ===\n")
 
-    result_a_b, result_b_a = engine.sync(end_date=end_date, dry_run=dry_run)
+    summary = engine.sync(end_date=end_date, dry_run=dry_run)
 
-    click.echo(f"\nSync {config.calendar_a_name} -> {config.calendar_b_name}:")
-    click.echo(
-        f"  {result_a_b.created} created, "
-        f"{result_a_b.updated} updated, "
-        f"{result_a_b.deleted} deleted"
-    )
+    # Group results by target calendar
+    click.echo(f"\nSync summary ({len(config.calendars)} calendars):\n")
 
-    click.echo(f"\nSync {config.calendar_b_name} -> {config.calendar_a_name}:")
-    click.echo(
-        f"  {result_b_a.created} created, "
-        f"{result_b_a.updated} updated, "
-        f"{result_b_a.deleted} deleted"
-    )
+    for result in summary.results:
+        if result.total_actions > 0:
+            source_name = config.get_calendar_name(result.source_id)
+            target_name = config.get_calendar_name(result.target_id)
+            click.echo(
+                f"  {source_name} -> {target_name}: "
+                f"{result.created} created, "
+                f"{result.updated} updated, "
+                f"{result.deleted} deleted"
+            )
 
-    all_errors = result_a_b.errors + result_b_a.errors
-    if all_errors:
+    total = summary.total_created + summary.total_updated + summary.total_deleted
+    if total == 0:
+        click.echo("  No changes needed.")
+    else:
+        click.echo(
+            f"\nTotal: {summary.total_created} created, "
+            f"{summary.total_updated} updated, "
+            f"{summary.total_deleted} deleted"
+        )
+
+    if summary.all_errors:
         click.echo("\nErrors:")
-        for err in all_errors:
+        for err in summary.all_errors:
             click.echo(f"  - {err}")
 
 
 @cli.command()
 def status() -> None:
-    """Show current configuration and sync status."""
+    """Show current configuration."""
     config = Config.load()
 
     if not config.is_configured():
         click.echo("Not configured. Run 'calsync configure' first.")
         return
 
-    click.echo(f"\nConfigured calendars:")
-    click.echo(f"  A: {config.calendar_a_name}")
-    click.echo(f"  B: {config.calendar_b_name}")
+    click.echo(f"\nConfigured calendars ({len(config.calendars)}):\n")
+    for i, cal in enumerate(config.calendars, 1):
+        click.echo(f"  {i}. {cal.name}")
 
 
 if __name__ == "__main__":
