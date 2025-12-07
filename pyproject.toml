@@ -1,0 +1,21 @@
+[project]
+name = "calsync"
+version = "0.1.0"
+description = "Bidirektionaler Kalender-Sync fuer macOS"
+readme = "README.md"
+authors = [
+    { name = "Sebastian Kempken", email = "881803+skempken@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pyobjc-framework-EventKit>=10.0",
+    "pyobjc-framework-Cocoa>=10.0",
+    "click>=8.1.0",
+]
+
+[project.scripts]
+calsync = "calsync.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
