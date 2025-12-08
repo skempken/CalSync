@@ -7,6 +7,12 @@ from typing import Optional
 from calsync.models.event import CalendarEvent
 from calsync.sync.tracker import EventTracker
 
+# EventKit participant status constants
+PARTICIPANT_STATUS_PENDING = 1
+PARTICIPANT_STATUS_ACCEPTED = 2
+PARTICIPANT_STATUS_DECLINED = 3
+PARTICIPANT_STATUS_TENTATIVE = 4
+
 
 class ChangeType(Enum):
     """Type of sync action."""
@@ -33,6 +39,27 @@ class ChangeDiffer:
     def __init__(self, tracker: EventTracker):
         self.tracker = tracker
 
+    def _should_sync_event(self, event: CalendarEvent) -> bool:
+        """
+        Check if an event should be synced.
+
+        Excludes:
+        - Placeholders (already synced)
+        - Pending events (not yet responded)
+        - Declined events
+        """
+        if self.tracker.is_placeholder(event):
+            return False
+
+        status = event.self_participant_status
+        # Skip pending (1) and declined (3) events
+        if status == PARTICIPANT_STATUS_PENDING:
+            return False
+        if status == PARTICIPANT_STATUS_DECLINED:
+            return False
+
+        return True
+
     def compute_sync_actions(
         self,
         source_events: list[CalendarEvent],
@@ -52,9 +79,9 @@ class ChangeDiffer:
         """
         actions: list[SyncAction] = []
 
-        # Filter: Only "real" events (not placeholders) from source
+        # Filter: Only syncable events (not placeholders, not pending/declined)
         real_source_events = [
-            e for e in source_events if not self.tracker.is_placeholder(e)
+            e for e in source_events if self._should_sync_event(e)
         ]
 
         # Find placeholders in target calendar that originated from source

@@ -7,6 +7,8 @@ from typing import Optional
 from EventKit import (
     EKEntityTypeEvent,
     EKEvent,
+    EKEventAvailabilityBusy,
+    EKEventAvailabilityTentative,
     EKEventStore,
     EKSpanThisEvent,
 )
@@ -69,6 +71,8 @@ class EventKitAdapter(CalendarAdapter):
             is_all_day=ek_event.isAllDay(),
             notes=ek_event.notes(),
             location=ek_event.location(),
+            availability=ek_event.availability(),
+            self_participant_status=ek_event.selfParticipantStatus(),
         )
 
     def get_calendars(self) -> list[dict]:
@@ -120,6 +124,7 @@ class EventKitAdapter(CalendarAdapter):
         end_date: datetime,
         is_all_day: bool = False,
         notes: Optional[str] = None,
+        availability: Optional[int] = None,
     ) -> CalendarEvent:
         """Create a new event."""
         calendar = self.store.calendarWithIdentifier_(calendar_id)
@@ -140,6 +145,9 @@ class EventKitAdapter(CalendarAdapter):
         if notes:
             event.setNotes_(notes)
 
+        if availability is not None:
+            event.setAvailability_(availability)
+
         success, error = self.store.saveEvent_span_error_(
             event, EKSpanThisEvent, None
         )
@@ -156,6 +164,7 @@ class EventKitAdapter(CalendarAdapter):
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         notes: Optional[str] = None,
+        availability: Optional[int] = None,
     ) -> CalendarEvent:
         """Update an existing event."""
         ek_event = self.store.eventWithIdentifier_(event_id)
@@ -170,6 +179,8 @@ class EventKitAdapter(CalendarAdapter):
             ek_event.setEndDate_(self._nsdate_from_datetime(end_date))
         if notes is not None:
             ek_event.setNotes_(notes)
+        if availability is not None:
+            ek_event.setAvailability_(availability)
 
         success, error = self.store.saveEvent_span_error_(
             ek_event, EKSpanThisEvent, None

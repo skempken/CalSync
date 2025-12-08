@@ -3,8 +3,16 @@
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
-CONFIG_FILE = Path.cwd() / ".calsync.json"
+CONFIG_DIR = Path.cwd()
+
+
+def get_config_file(profile: Optional[str] = None) -> Path:
+    """Get config file path for a profile."""
+    if profile:
+        return CONFIG_DIR / f".calsync-{profile}.json"
+    return CONFIG_DIR / ".calsync.json"
 
 
 @dataclass
@@ -20,14 +28,16 @@ class Config:
     """Application configuration."""
 
     calendars: list[CalendarConfig] = field(default_factory=list)
+    profile: Optional[str] = None
 
     @classmethod
-    def load(cls) -> "Config":
+    def load(cls, profile: Optional[str] = None) -> "Config":
         """Load configuration from file."""
-        if not CONFIG_FILE.exists():
-            return cls()
+        config_file = get_config_file(profile)
+        if not config_file.exists():
+            return cls(profile=profile)
 
-        with open(CONFIG_FILE) as f:
+        with open(config_file) as f:
             data = json.load(f)
 
         # Handle legacy format (calendar_a_id, calendar_b_id)
@@ -47,15 +57,16 @@ class Config:
                         name=data.get("calendar_b_name", "Calendar B"),
                     )
                 )
-            return cls(calendars=calendars)
+            return cls(calendars=calendars, profile=profile)
 
         # New format
         calendars = [CalendarConfig(**c) for c in data.get("calendars", [])]
-        return cls(calendars=calendars)
+        return cls(calendars=calendars, profile=profile)
 
     def save(self) -> None:
         """Save configuration to file."""
-        with open(CONFIG_FILE, "w") as f:
+        config_file = get_config_file(self.profile)
+        with open(config_file, "w") as f:
             json.dump(
                 {"calendars": [{"id": c.id, "name": c.name} for c in self.calendars]},
                 f,

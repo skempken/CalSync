@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 import click
 
@@ -11,8 +12,13 @@ from calsync.config import CalendarConfig, Config
 
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-def cli(verbose: bool) -> None:
+@click.option("--profile", "-p", default=None, help="Configuration profile name")
+@click.pass_context
+def cli(ctx: click.Context, verbose: bool, profile: Optional[str]) -> None:
     """CalSync - Multi-calendar sync for macOS."""
+    ctx.ensure_object(dict)
+    ctx.obj["profile"] = profile
+
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
@@ -36,8 +42,10 @@ def list_calendars() -> None:
 
 
 @cli.command()
-def configure() -> None:
+@click.pass_context
+def configure(ctx: click.Context) -> None:
     """Configure the calendars to sync."""
+    profile = ctx.obj.get("profile")
     adapter = EventKitAdapter()
     calendars = adapter.get_calendars()
 
@@ -78,10 +86,11 @@ def configure() -> None:
         for i in indices
     ]
 
-    config = Config(calendars=selected)
+    config = Config(calendars=selected, profile=profile)
     config.save()
 
-    click.echo(f"\nConfiguration saved ({len(selected)} calendars):")
+    profile_info = f" (profile: {profile})" if profile else ""
+    click.echo(f"\nConfiguration saved{profile_info} ({len(selected)} calendars):")
     for i, cal in enumerate(selected, 1):
         click.echo(f"  {i}. {cal.name}")
 
@@ -89,12 +98,15 @@ def configure() -> None:
 @cli.command()
 @click.option("--days", "-d", default=30, help="Number of days to sync")
 @click.option("--dry-run", is_flag=True, help="Only simulate, don't make changes")
-def sync(days: int, dry_run: bool) -> None:
+@click.pass_context
+def sync(ctx: click.Context, days: int, dry_run: bool) -> None:
     """Sync placeholders between configured calendars."""
-    config = Config.load()
+    profile = ctx.obj.get("profile")
+    config = Config.load(profile)
 
     if not config.is_configured():
-        click.echo("Error: Calendars not configured. Run 'calsync configure' first.")
+        profile_hint = f" for profile '{profile}'" if profile else ""
+        click.echo(f"Error: Calendars not configured{profile_hint}. Run 'calsync configure' first.")
         return
 
     from calsync.sync.engine import SyncEngine
@@ -105,7 +117,10 @@ def sync(days: int, dry_run: bool) -> None:
         calendar_ids=config.get_calendar_ids(),
     )
 
-    end_date = datetime.now() + timedelta(days=days)
+    # Ende: Mitternacht in `days` Tagen (lokale Zeitzone)
+    # -d 1 = heute bis Tagesende, -d 2 = bis morgen Tagesende, etc.
+    today_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    end_date = today_midnight + timedelta(days=days)
 
     if dry_run:
         click.echo("=== DRY RUN - No changes will be made ===\n")
@@ -113,7 +128,8 @@ def sync(days: int, dry_run: bool) -> None:
     summary = engine.sync(end_date=end_date, dry_run=dry_run)
 
     # Group results by target calendar
-    click.echo(f"\nSync summary ({len(config.calendars)} calendars):\n")
+    profile_info = f" [profile: {profile}]" if profile else ""
+    click.echo(f"\nSync summary ({len(config.calendars)} calendars){profile_info}:\n")
 
     for result in summary.results:
         if result.total_actions > 0:
@@ -143,15 +159,19 @@ def sync(days: int, dry_run: bool) -> None:
 
 
 @cli.command()
-def status() -> None:
+@click.pass_context
+def status(ctx: click.Context) -> None:
     """Show current configuration."""
-    config = Config.load()
+    profile = ctx.obj.get("profile")
+    config = Config.load(profile)
 
     if not config.is_configured():
-        click.echo("Not configured. Run 'calsync configure' first.")
+        profile_hint = f" for profile '{profile}'" if profile else ""
+        click.echo(f"Not configured{profile_hint}. Run 'calsync configure' first.")
         return
 
-    click.echo(f"\nConfigured calendars ({len(config.calendars)}):\n")
+    profile_info = f" [profile: {profile}]" if profile else ""
+    click.echo(f"\nConfigured calendars ({len(config.calendars)}){profile_info}:\n")
     for i, cal in enumerate(config.calendars, 1):
         click.echo(f"  {i}. {cal.name}")
 

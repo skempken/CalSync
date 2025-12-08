@@ -47,6 +47,7 @@ class CalendarAdapter(ABC):
         end_date: datetime,
         is_all_day: bool = False,
         notes: Optional[str] = None,
+        availability: Optional[int] = None,
     ) -> CalendarEvent:
         """Create a new event."""
         pass
@@ -59,6 +60,7 @@ class CalendarAdapter(ABC):
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         notes: Optional[str] = None,
+        availability: Optional[int] = None,
     ) -> CalendarEvent:
         """Update an existing event."""
         pass

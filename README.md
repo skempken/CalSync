@@ -57,6 +57,18 @@ uv run calsync sync --days 60
 uv run calsync -v sync
 ```
 
+### Profile (für verschiedene Konfigurationen)
+
+```bash
+# Separates Profil konfigurieren
+uv run calsync -p work configure
+
+# Sync mit Profil
+uv run calsync -p work sync
+```
+
+Profile werden als `.calsync-<name>.json` gespeichert.
+
 ## Funktionsweise
 
 - Für jeden "echten" Termin in einem Kalender wird ein Platzhalter in allen anderen konfigurierten Kalendern erstellt
@@ -66,9 +78,21 @@ uv run calsync -v sync
 - Gelöschte Termine führen zur Löschung der zugehörigen Platzhalter
 - Platzhalter werden über eine versteckte ID im Notizen-Feld getrackt
 
+### Annahmestatus & Verfügbarkeit
+
+Der Annahmestatus von Einladungen wird auf Platzhalter übertragen:
+
+| Quelltermin | Platzhalter |
+|-------------|-------------|
+| Außer Haus (Out of Office) | Außer Haus |
+| Unter Vorbehalt (Tentative) | Unter Vorbehalt |
+| Angenommen (Accepted) | Belegt |
+| Nicht beantwortet (Pending) | *nicht synchronisiert* |
+| Abgelehnt (Declined) | *nicht synchronisiert* |
+
 ## Voraussetzungen
 
-- macOS (getestet mit macOS Sequoia)
+- macOS (getestet mit macOS Tahoe)
 - Python 3.12+
 - Kalenderzugriff muss beim ersten Start gewährt werden
 

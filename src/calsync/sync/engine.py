@@ -8,8 +8,17 @@ from itertools import permutations
 from calsync.adapters.base import CalendarAdapter
 from calsync.models.event import CalendarEvent
 from calsync.models.placeholder import PlaceholderInfo
-from calsync.sync.differ import ChangeDiffer, ChangeType
+from calsync.sync.differ import (
+    ChangeDiffer,
+    ChangeType,
+    PARTICIPANT_STATUS_TENTATIVE,
+)
 from calsync.sync.tracker import EventTracker
+
+# EventKit availability constants
+AVAILABILITY_BUSY = 0
+AVAILABILITY_TENTATIVE = 2
+AVAILABILITY_UNAVAILABLE = 3  # Out of Office / Außer Haus
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +76,24 @@ class SyncEngine:
         self.calendar_ids = calendar_ids
         self.tracker = EventTracker()
         self.differ = ChangeDiffer(self.tracker)
+
+    @staticmethod
+    def _get_placeholder_availability(source_event: CalendarEvent) -> int:
+        """
+        Determine placeholder availability based on source event status.
+
+        Priority:
+        1. Source Unavailable (OOO) → Placeholder Unavailable (3)
+        2. Source Tentative (4) → Placeholder Tentative (2)
+        3. Otherwise → Placeholder Busy (0)
+        """
+        # Out of Office / Außer Haus has highest priority
+        if source_event.availability == AVAILABILITY_UNAVAILABLE:
+            return AVAILABILITY_UNAVAILABLE
+        # Tentative participant status
+        if source_event.self_participant_status == PARTICIPANT_STATUS_TENTATIVE:
+            return AVAILABILITY_TENTATIVE
+        return AVAILABILITY_BUSY
 
     def sync(
         self,
@@ -196,6 +223,8 @@ class SyncEngine:
             source_hash=source_hash,
         )
 
+        availability = self._get_placeholder_availability(source_event)
+
         self.adapter.create_event(
             calendar_id=target_cal_id,
             title=self.PLACEHOLDER_TITLE,
@@ -203,6 +232,7 @@ class SyncEngine:
             end_date=source_event.end_date,
             is_all_day=source_event.is_all_day,
             notes=notes,
+            availability=availability,
         )
 
     def _update_placeholder(
@@ -222,9 +252,12 @@ class SyncEngine:
             source_hash=source_hash,
         )
 
+        availability = self._get_placeholder_availability(source_event)
+
         self.adapter.update_event(
             event_id=placeholder_event.id,
             start_date=source_event.start_date,
             end_date=source_event.end_date,
             notes=notes,
+            availability=availability,
         )

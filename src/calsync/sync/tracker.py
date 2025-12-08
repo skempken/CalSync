@@ -20,6 +20,8 @@ class EventTracker:
             "start": event.start_date.isoformat(),
             "end": event.end_date.isoformat(),
             "all_day": event.is_all_day,
+            "participant_status": event.self_participant_status,
+            "availability": event.availability,
         }
         return hashlib.sha256(
             json.dumps(data, sort_keys=True).encode()
