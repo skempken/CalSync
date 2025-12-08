@@ -221,6 +221,7 @@ class SyncEngine:
             source_event_id=source_event.id,
             source_calendar_id=source_cal_id,
             source_hash=source_hash,
+            source_start=source_event.start_date.isoformat(),
         )
 
         availability = self._get_placeholder_availability(source_event)
@@ -250,6 +251,7 @@ class SyncEngine:
             source_event_id=source_event.id,
             source_calendar_id=source_cal_id,
             source_hash=source_hash,
+            source_start=source_event.start_date.isoformat(),
         )
 
         availability = self._get_placeholder_availability(source_event)

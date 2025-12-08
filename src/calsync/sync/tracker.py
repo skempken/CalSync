@@ -38,11 +38,17 @@ class EventTracker:
         return PlaceholderInfo.from_notes(event.notes)
 
     @staticmethod
+    def get_occurrence_key(event: CalendarEvent) -> str:
+        """Get unique key for an event occurrence (handles recurring events)."""
+        return f"{event.id}_{event.start_date.isoformat()}"
+
+    @staticmethod
     def create_placeholder_notes(
         tracking_id: str,
         source_event_id: str,
         source_calendar_id: str,
         source_hash: str,
+        source_start: str,
     ) -> str:
         """Create notes content for a placeholder."""
         info = PlaceholderInfo(
@@ -50,5 +56,6 @@ class EventTracker:
             source_event_id=source_event_id,
             source_calendar_id=source_calendar_id,
             source_hash=source_hash,
+            source_start=source_start,
         )
         return info.to_notes_marker()

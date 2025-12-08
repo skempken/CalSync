@@ -94,6 +94,7 @@ Für CalSync bedeutet das:
 
 1. **Lesen:** `availability()` und `selfParticipantStatus()` vom Quelltermin
 2. **Mapping (mit Priorität):**
+   - Availability Free (1) → Nicht synchronisieren
    - Availability Unavailable (3) → Availability Unavailable (3) [Außer Haus]
    - Participant Tentative (4) → Availability Tentative (2)
    - Participant Accepted (2) → Availability Busy (0)

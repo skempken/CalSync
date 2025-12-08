@@ -17,11 +17,18 @@ class PlaceholderInfo:
     source_event_id: str
     source_calendar_id: str
     source_hash: str
+    source_start: Optional[str] = None  # ISO format, for recurring events
 
     @staticmethod
     def generate_tracking_id() -> str:
         """Generate a new tracking ID."""
         return str(uuid.uuid4())[:8]
+
+    def get_occurrence_key(self) -> str:
+        """Get unique key for this occurrence (handles recurring events)."""
+        if self.source_start:
+            return f"{self.source_event_id}_{self.source_start}"
+        return self.source_event_id
 
     def to_notes_marker(self) -> str:
         """Create the tracking marker for the notes field."""
@@ -31,6 +38,8 @@ class PlaceholderInfo:
             "scal": self.source_calendar_id,
             "hash": self.source_hash,
         }
+        if self.source_start:
+            data["sstart"] = self.source_start
         return f"{TRACKING_PREFIX}{json.dumps(data)}{TRACKING_SUFFIX}"
 
     @classmethod
@@ -47,6 +56,7 @@ class PlaceholderInfo:
                 source_event_id=data["src"],
                 source_calendar_id=data["scal"],
                 source_hash=data["hash"],
+                source_start=data.get("sstart"),  # Optional for backwards compat
             )
         except (ValueError, json.JSONDecodeError, KeyError):
             return None

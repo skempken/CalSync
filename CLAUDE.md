@@ -71,6 +71,7 @@ Der Annahmestatus und die Verfügbarkeit von Terminen werden berücksichtigt:
 | Außer Haus (Out of Office) | Außer Haus |
 | Tentative (unter Vorbehalt) | Tentative |
 | Accepted (angenommen) | Busy |
+| Free (frei) | Nicht synchronisiert |
 | Pending (nicht beantwortet) | Nicht synchronisiert |
 | Declined (abgelehnt) | Nicht synchronisiert |
 
@@ -82,7 +83,8 @@ EventKit-Details siehe `notes.md`.
 
 - **Adapter-Schicht**: Abstrahiert Kalenderzugriff (aktuell nur EventKit)
 - **Sync-Logik**: Engine orchestriert, Differ erkennt Änderungen, Tracker verwaltet IDs
-- **Tracking**: Platzhalter werden über JSON-Marker im Notes-Feld identifiziert: `[CALSYNC:{"tid":"...","src":"...","scal":"...","hash":"..."}]`
+- **Tracking**: Platzhalter werden über JSON-Marker im Notes-Feld identifiziert: `[CALSYNC:{"tid":"...","src":"...","scal":"...","hash":"...","sstart":"..."}]`
+- **Wiederkehrende Termine**: Jedes Vorkommen wird separat getrackt via `event_id + start_date`
 - **Status-Handling**: `selfParticipantStatus()` vom Quelltermin → `availability` beim Platzhalter
 
 ## Wichtige Hinweise

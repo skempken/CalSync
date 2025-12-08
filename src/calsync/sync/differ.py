@@ -13,6 +13,9 @@ PARTICIPANT_STATUS_ACCEPTED = 2
 PARTICIPANT_STATUS_DECLINED = 3
 PARTICIPANT_STATUS_TENTATIVE = 4
 
+# EventKit availability constants
+AVAILABILITY_FREE = 1
+
 
 class ChangeType(Enum):
     """Type of sync action."""
@@ -47,8 +50,13 @@ class ChangeDiffer:
         - Placeholders (already synced)
         - Pending events (not yet responded)
         - Declined events
+        - Free events (no time blocking)
         """
         if self.tracker.is_placeholder(event):
+            return False
+
+        # Skip free events (availability = 1)
+        if event.availability == AVAILABILITY_FREE:
             return False
 
         status = event.self_participant_status
@@ -85,18 +93,20 @@ class ChangeDiffer:
         ]
 
         # Find placeholders in target calendar that originated from source
+        # Use occurrence key (event_id + start_date) to handle recurring events
         placeholders: dict[str, CalendarEvent] = {}
         for event in target_events:
             if self.tracker.is_placeholder(event):
                 info = self.tracker.extract_tracking_info(event)
                 if info and info.source_calendar_id == source_calendar_id:
-                    placeholders[info.source_event_id] = event
+                    placeholders[info.get_occurrence_key()] = event
 
         # 1. CREATE/UPDATE: Check each source event
         for source in real_source_events:
-            if source.id in placeholders:
+            occurrence_key = self.tracker.get_occurrence_key(source)
+            if occurrence_key in placeholders:
                 # Placeholder exists - check if update needed
-                placeholder = placeholders[source.id]
+                placeholder = placeholders[occurrence_key]
                 info = self.tracker.extract_tracking_info(placeholder)
                 current_hash = self.tracker.compute_event_hash(source)
 
@@ -121,9 +131,9 @@ class ChangeDiffer:
                 )
 
         # 2. DELETE: Remove placeholders without source event
-        source_ids = {e.id for e in real_source_events}
-        for source_id, placeholder in placeholders.items():
-            if source_id not in source_ids:
+        source_keys = {self.tracker.get_occurrence_key(e) for e in real_source_events}
+        for occurrence_key, placeholder in placeholders.items():
+            if occurrence_key not in source_keys:
                 actions.append(
                     SyncAction(
                         action_type=ChangeType.DELETE,

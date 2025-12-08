@@ -73,8 +73,9 @@ Profile werden als `.calsync-<name>.json` gespeichert.
 
 - Für jeden "echten" Termin in einem Kalender wird ein Platzhalter in allen anderen konfigurierten Kalendern erstellt
 - Bei n Kalendern werden n-1 Platzhalter pro Termin erstellt
-- Platzhalter haben den Titel "Nicht verfügbar" und blockieren nur die Zeit
-- Änderungen an Terminen (Zeit, Dauer) werden bei erneutem Sync übernommen
+- Wiederkehrende Termine werden korrekt behandelt (jedes Vorkommen einzeln)
+- Platzhalter haben den Titel "Nicht verfügbar", blockieren nur die Zeit und haben keine Erinnerungen
+- Änderungen an Terminen (Zeit, Dauer, Status) werden bei erneutem Sync übernommen
 - Gelöschte Termine führen zur Löschung der zugehörigen Platzhalter
 - Platzhalter werden über eine versteckte ID im Notizen-Feld getrackt
 
@@ -87,6 +88,7 @@ Der Annahmestatus von Einladungen wird auf Platzhalter übertragen:
 | Außer Haus (Out of Office) | Außer Haus |
 | Unter Vorbehalt (Tentative) | Unter Vorbehalt |
 | Angenommen (Accepted) | Belegt |
+| Frei (Free) | *nicht synchronisiert* |
 | Nicht beantwortet (Pending) | *nicht synchronisiert* |
 | Abgelehnt (Declined) | *nicht synchronisiert* |
 
