@@ -7,6 +7,7 @@ authors = [
     { name = "Sebastian Kempken", email = "881803+skempken@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
 dependencies = [
     "pyobjc-framework-EventKit>=10.0",
     "pyobjc-framework-Cocoa>=10.0",
