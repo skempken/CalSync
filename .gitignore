@@ -11,6 +11,11 @@ wheels/
 
 # Local config
 .calsync.json
+.calsync-*.json
+
+# Local scripts & logs
+run-sync.sh
+calsync.log
 
 # Claude Code
 .claude/
