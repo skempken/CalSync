@@ -12,14 +12,16 @@ from calsync.config import CalendarConfig, Config
 
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+@click.option("--quiet", "-q", is_flag=True, help="Quiet output (only errors and changes)")
 @click.option("--profile", "-p", default=None, help="Configuration profile name")
 @click.pass_context
-def cli(ctx: click.Context, verbose: bool, profile: Optional[str]) -> None:
+def cli(ctx: click.Context, verbose: bool, quiet: bool, profile: Optional[str]) -> None:
     """CalSync - Multi-calendar sync for macOS."""
     ctx.ensure_object(dict)
     ctx.obj["profile"] = profile
+    ctx.obj["quiet"] = quiet
 
-    level = logging.DEBUG if verbose else logging.INFO
+    level = logging.DEBUG if verbose else (logging.WARNING if quiet else logging.INFO)
     logging.basicConfig(
         level=level,
         format="%(levelname)s: %(message)s",
@@ -102,6 +104,7 @@ def configure(ctx: click.Context) -> None:
 def sync(ctx: click.Context, days: int, dry_run: bool) -> None:
     """Sync placeholders between configured calendars."""
     profile = ctx.obj.get("profile")
+    quiet = ctx.obj.get("quiet", False)
     config = Config.load(profile)
 
     if not config.is_configured():
@@ -122,35 +125,44 @@ def sync(ctx: click.Context, days: int, dry_run: bool) -> None:
     today_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = today_midnight + timedelta(days=days)
 
-    if dry_run:
+    if dry_run and not quiet:
         click.echo("=== DRY RUN - No changes will be made ===\n")
 
     summary = engine.sync(end_date=end_date, dry_run=dry_run)
 
-    # Group results by target calendar
-    profile_info = f" [profile: {profile}]" if profile else ""
-    click.echo(f"\nSync summary ({len(config.calendars)} calendars){profile_info}:\n")
-
-    for result in summary.results:
-        if result.total_actions > 0:
-            source_name = config.get_calendar_name(result.source_id)
-            target_name = config.get_calendar_name(result.target_id)
-            click.echo(
-                f"  {source_name} -> {target_name}: "
-                f"{result.created} created, "
-                f"{result.updated} updated, "
-                f"{result.deleted} deleted"
-            )
-
     total = summary.total_created + summary.total_updated + summary.total_deleted
-    if total == 0:
-        click.echo("  No changes needed.")
+
+    if quiet:
+        # Quiet mode: one line if changes, nothing if no changes
+        if total > 0 or summary.all_errors:
+            click.echo(
+                f"Sync: +{summary.total_created} ~{summary.total_updated} -{summary.total_deleted}"
+                + (f" ({len(summary.all_errors)} errors)" if summary.all_errors else "")
+            )
     else:
-        click.echo(
-            f"\nTotal: {summary.total_created} created, "
-            f"{summary.total_updated} updated, "
-            f"{summary.total_deleted} deleted"
-        )
+        # Normal output
+        profile_info = f" [profile: {profile}]" if profile else ""
+        click.echo(f"\nSync summary ({len(config.calendars)} calendars){profile_info}:\n")
+
+        for result in summary.results:
+            if result.total_actions > 0:
+                source_name = config.get_calendar_name(result.source_id)
+                target_name = config.get_calendar_name(result.target_id)
+                click.echo(
+                    f"  {source_name} -> {target_name}: "
+                    f"{result.created} created, "
+                    f"{result.updated} updated, "
+                    f"{result.deleted} deleted"
+                )
+
+        if total == 0:
+            click.echo("  No changes needed.")
+        else:
+            click.echo(
+                f"\nTotal: {summary.total_created} created, "
+                f"{summary.total_updated} updated, "
+                f"{summary.total_deleted} deleted"
+            )
 
     if summary.all_errors:
         click.echo("\nErrors:")
